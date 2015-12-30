@@ -29,8 +29,7 @@ data$rpv[-1] <- diff(fitted(model.np)) * data$volume
 
 data$ma.volume <- SMA(data$volume, 50)
 data$ma.rpv <- SMA(data$rpv, 50)
-data$sign.rpv <- ifelse(data$rpv > data$ma.rpv, 1, -1)
-paste0("\"", current.date, "/", current.date, "\"")
+
 T = 0 # this parameter is used for the rolling window
 good.stock = FALSE
 
@@ -64,12 +63,11 @@ while(t < (nrow(data)-T)){
         dprv1 <- abs(mean(datA[datA$date %in% d.k:d.a & datA$rpv <= 0,
                                "rpv"],
                           na.rm = TRUE))
+
+        if(is.na(dprv1))
+            dprv1 <- mean(datA$ma.rpv)
         
-        
-        if(is.na(dprv1) | is.na(uprv1))
-            alpha1 <- 0
-        else
-            alpha1 <- uprv1/dprv1
+        alpha1 <- uprv1/dprv1
         
         delta <- p.a/p.k
         
@@ -105,10 +103,10 @@ while(t < (nrow(data)-T)){
                         uprv2 <- abs(mean(datC[datC$rpv > 0, "rpv"], na.rm = TRUE))
                         dprv2 <- abs(mean(datC[datC$rpv <= 0, "rpv"], na.rm = TRUE))
 
-                        if(is.na(dprv2) | is.na(uprv2))
-                            alpha2 <- 0
-                        else
-                            alpha2 <- uprv2/dprv2
+                        if(is.na(dprv2))
+                            dprv2 <- mean(datC$ma.rpv)
+                        
+                        alpha2 <- uprv2/dprv2
                         
                         if(p.c > p.b & alpha2 > 1){
                             
@@ -126,6 +124,10 @@ while(t < (nrow(data)-T)){
                                 
                                 uprv3 <- abs(mean(datD[datD$rpv > 0, "rpv"], na.rm = TRUE))
                                 dprv3 <- abs(mean(datD[datD$rpv <= 0 , "rpv"], na.rm = TRUE))
+
+                                if(is.na(dprv3))
+                                    dprv3 <- mean(datD$ma.rpv)
+                                
                                 beta <- uprv2/dprv3
                                 
                                 if(p.d <= p.c & (p.d > 0.8*p.c + 0.2*p.b) &
