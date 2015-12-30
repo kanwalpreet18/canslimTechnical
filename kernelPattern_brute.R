@@ -65,13 +65,12 @@ while(t < (nrow(data)-T)){
                           na.rm = TRUE))
 
         if(is.na(dprv1))
-            dprv1 <- mean(datA$ma.rpv)
+            dprv1 <- mean(datA$ma.rpv, na.rm = TRUE)
         
-        alpha1 <- uprv1/dprv1
-        
+        alpha1 <- uprv1/dprv1        
         delta <- p.a/p.k
         
-        if(p.k < p.a & alpha1 > 1){
+        if(delta > 1 & alpha1 > 1){
             
             cat("Okay good setup! Let's move on now... \n")
             
@@ -104,7 +103,7 @@ while(t < (nrow(data)-T)){
                         dprv2 <- abs(mean(datC[datC$rpv <= 0, "rpv"], na.rm = TRUE))
 
                         if(is.na(dprv2))
-                            dprv2 <- mean(datC$ma.rpv)
+                            dprv2 <- mean(datC$ma.rpv, na.rm = TRUE)
                         
                         alpha2 <- uprv2/dprv2
                         
@@ -126,14 +125,14 @@ while(t < (nrow(data)-T)){
                                 dprv3 <- abs(mean(datD[datD$rpv <= 0 , "rpv"], na.rm = TRUE))
 
                                 if(is.na(dprv3))
-                                    dprv3 <- mean(datD$ma.rpv)
+                                    dprv3 <- mean(datD$ma.rpv, na.rm = TRUE)
                                 
                                 beta <- uprv2/dprv3
                                 
                                 if(p.d <= p.c & (p.d > 0.8*p.c + 0.2*p.b) &
                                    beta > 1){
                                     if(p.c <= p.a & p.d > p.b){
-                                        good.stock = TRUE
+                                        good.stock <- TRUE
                                         gamma <- log(alpha2) + log(beta) + delta
 
                                         good.points[[i]] <- data.frame(d.k, d.a,
