@@ -5,19 +5,19 @@ library("quantmod")
 library("TTR")
 library("parallel")
 
-price <- getSymbols("SSWL.BO", env = NULL)
+price <- getSymbols("SHILGRAVQ.BO", env = NULL)
 save(price, file = "data.rda")
 
 load("data.rda")
 data <- price
 colnames(data) <- c("open", "high", "low", "close", "volume", "adjusted")
 
-data <- data["2014-10-20/2015-12-31"]
+data <- data["2015-05-10/2015-12-31"]
 
 data <- as.data.frame(data)
 data$date <- order(rownames(data))
  
-model.np <- npreg(close ~ date, regtype = "ll", bw = "cv.aic",
+model.np <- npreg(close ~ date, regtype = "ll", bws = 2,
                   gradients = TRUE, data = data)
 
 summary(model.np)
@@ -30,8 +30,8 @@ data$rpv[-1] <- diff(fitted(model.np)) * data$volume
 data$ma.volume <- SMA(data$volume, 50)
 data$ma.rpv <- SMA(data$rpv, 50)
 data$sign.rpv <- ifelse(data$rpv > data$ma.rpv, 1, -1)
-
-T = 10 # this parameter is used for the rolling window
+paste0("\"", current.date, "/", current.date, "\"")
+T = 0 # this parameter is used for the rolling window
 good.stock = FALSE
 
 i <- 1
@@ -48,7 +48,7 @@ while(t < (nrow(data)-T)){
     p.k <- dat[dat$date == t, "fitted"]
     
     ## search for region K to A
-    k <- 30
+    k <- 25
     while(k > 15){
         cat("Searching SETUP with width =", k, "\n")
         
@@ -61,7 +61,7 @@ while(t < (nrow(data)-T)){
         uprv1 <- abs(mean(datA[datA$date %in% d.k:d.a & datA$rpv > 0,
                                "rpv"],
                           na.rm = TRUE))
-        dprv1 <- abs(mean(datA[datA$date %in% d.k:d.a & datA$rpv < 0,
+        dprv1 <- abs(mean(datA[datA$date %in% d.k:d.a & datA$rpv <= 0,
                                "rpv"],
                           na.rm = TRUE))
         
@@ -79,7 +79,7 @@ while(t < (nrow(data)-T)){
             
             ## search for region A to B
             a <- 40
-            while(a > 20){
+            while(a > 10){
                 
                 cat("Let's search for LEFT SIDE CUP with width =", a, "\n")
                 
@@ -87,7 +87,6 @@ while(t < (nrow(data)-T)){
                 p.b <- datB[datB$fitted == min(datB$fitted), "fitted"]
                 d.b <- datB[datB$fitted == min(datB$fitted), "date"]
                 avg.vol <- mean(datB$volume, na.rm = TRUE)
-                avg.ma.rpv <- mean(datB$ma.rpv, na.rm = TRUE)
                 avg.ma.vol <- mean(datB$ma.volume, na.rm = TRUE)
 
                 if(p.b < p.a & avg.vol < avg.ma.vol){
@@ -95,7 +94,7 @@ while(t < (nrow(data)-T)){
                     cat("Voila! You found the bottom, it's all uphill from here...\n")
                     
                     ## search for region B to C
-                    b <- 2*a
+                    b <- a
                     while(b > round(a/3)){
                         
                         cat("Let's search for RIGHT SIDE CUP with width =", b, "\n")
@@ -104,7 +103,7 @@ while(t < (nrow(data)-T)){
                         d.c <- datC[datC$fitted == max(datC$fitted), "date"]
                         
                         uprv2 <- abs(mean(datC[datC$rpv > 0, "rpv"], na.rm = TRUE))
-                        dprv2 <- abs(mean(datC[datC$rpv < 0, "rpv"], na.rm = TRUE))
+                        dprv2 <- abs(mean(datC[datC$rpv <= 0, "rpv"], na.rm = TRUE))
 
                         if(is.na(dprv2) | is.na(uprv2))
                             alpha2 <- 0
@@ -116,17 +115,17 @@ while(t < (nrow(data)-T)){
                             cat("Almost there... be patient now! :D \n")
                             
                             ## search for region C to D
-                            c <- b
+                            c <- b/2
                             while(c > round(b/4)){
                                 cat("Let's search for the handle now with width =", c, "\n")
                                 cat(t, " ", k, " ", a, " ", b, " ", c, "\n")
                                 
-                                datC <- dat[dat$date > d.c & dat$date <= d.c + c, ]
-                                p.d <- datC[datC$fitted == min(datC$fitted), "fitted"]
-                                d.d <- datC[datC$fitted == min(datC$fitted), "date"]
+                                datD <- dat[dat$date > d.c & dat$date <= d.c + c, ]
+                                p.d <- datD[datD$fitted == min(datD$fitted), "fitted"]
+                                d.d <- datD[datD$fitted == min(datD$fitted), "date"]
                                 
-                                uprv3 <- abs(mean(datC[ , "rpv"], na.rm = TRUE))
-                                dprv3 <- abs(mean(datC[ , "rpv"], na.rm = TRUE))
+                                uprv3 <- abs(mean(datD[datD$rpv > 0, "rpv"], na.rm = TRUE))
+                                dprv3 <- abs(mean(datD[datD$rpv <= 0 , "rpv"], na.rm = TRUE))
                                 beta <- uprv2/dprv3
                                 
                                 if(p.d <= p.c & (p.d > 0.8*p.c + 0.2*p.b) &
@@ -141,7 +140,7 @@ while(t < (nrow(data)-T)){
                                         cat("Hurrah! Got ", i, " hits! \n")
 
                                         k <- 15
-                                        a <- 20
+                                        a <- 10
                                         b <- round(a/3)
                                         c <- round(b/4)
                                         i <- i + 1
