@@ -12,17 +12,18 @@ start.date <- current.date - 300
 symbols.list <- read.csv("DATA/bseSymbols.csv")[ ,2]
 symbols.list <- paste0(symbols.list, ".BO")
 
-system.time(price.data <- mclapply(symbols.list, function(x){
-                           tryCatch(
-                               getSymbols(x, env = NULL,
-                                          from = start.date),
-                               error = function(e) NULL)
-                       }, mc.cores = 3))
+## system.time(price.data <- mclapply(symbols.list, function(x){
+##                            tryCatch(
+##                                getSymbols(x, env = NULL,
+##                                           from = start.date),
+##                                error = function(e) NULL)
+##                        }, mc.cores = 3))
 
-names(price.data) <- symbols.list
-price.data <- price.data[!sapply(price.data, is.null)]
-save(price.data, file = "prices.Rda")
+## names(price.data) <- symbols.list
+## price.data <- price.data[!sapply(price.data, is.null)]
+## save(price.data, file = "prices.Rda")
 
+load("prices.Rda")
                                         # searching for patterns in each stock
 contenders <- mclapply(price.data, function(price){
                            tryCatch({
@@ -37,8 +38,21 @@ contenders <- mclapply(price.data, function(price){
                                data <- as.data.frame(data)
                                data$date.no <- order(rownames(data))
                                data$date <- as.Date(rownames(data))
+
+                               data$xopen <- data$open
+                               data$xhigh <- data$high
+                               data$xlow <- data$low
+                               data$xclose <- data$close
                                
-                               model.np <- npreg(close ~ date.no, regtype = "ll", bws = 3.5,
+                               for (i in 2:nrow(data)){
+                                   data$xopen[i] <- (data$xopen[i-1] + data$close[i-1])/2
+                                   data$xclose[i] <- (data$open[i] + data$high[i] + data$low[i] + data$close[i])/4
+                                   data$xhigh[i] <- max(data$high[i], data$xopen[i], data$xclose[i])
+                                   data$xlow[i] <- min(data$low[i], data$xopen[i], data$xclose[i])
+                               }
+
+                               
+                               model.np <- npreg(xclose ~ date.no, regtype = "ll", bws = 3,
                                                  gradients = TRUE, data = data)
                                
                                ## summary(model.np)
@@ -68,7 +82,7 @@ contenders <- mclapply(price.data, function(price){
 
                                for(a in max.loc){
                                    
-                                   k <- 10
+                                   k <- 20
                                    while(k > 5){
                                        dat <- data[data$date >= data$date[a-k], ]
 
@@ -77,6 +91,8 @@ contenders <- mclapply(price.data, function(price){
 
                                        d.a <- data$date[a]
                                        p.a <- dat[dat$date == d.a, "fitted"]
+                                       m.price <- max(data[data$date < d.a, "fitted"])
+                                       
 
                                        uprv1 <- abs(mean(dat[dat$date %in% d.k:d.a & dat$rpv > 0,
                                                              "rpv"],
@@ -92,8 +108,10 @@ contenders <- mclapply(price.data, function(price){
                                        alpha1 <- uprv1/dprv1
                                        delta <- p.a/p.k
                                        
-                                       if(delta > 1 & alpha1 > 1 & p.a > 30){
+                                       if(delta >= 1.15 & alpha1 > 1 & p.a > 30 &
+                                          p.a > m.price){
                                            min.loc1 <- min.loc[which(min.loc > a)]
+                                           
                                            for(b in min.loc1){
                                                d.b <- data$date[b]
                                                p.b <- data[data$date == d.b, "fitted"]
@@ -104,7 +122,8 @@ contenders <- mclapply(price.data, function(price){
 
                                                dur.cond1 <- ((d.b - d.a) < 60) & ((d.b - d.a) > 20)
                                                
-                                               if(p.b < p.a & avg.vol < avg.ma.vol &
+                                               if(p.b < 0.85*p.a & p.b >= 0.65*p.a &
+                                                  avg.vol < avg.ma.vol &
                                                   dur.cond1){
 
                                                    max.loc1 <- max.loc[which(max.loc > b)]
@@ -122,11 +141,11 @@ contenders <- mclapply(price.data, function(price){
                                                                                   "rpv"], na.rm = TRUE))
                                                        
                                                        alpha2 <- uprv2/dprv2
-                                                       dur.cond2 <- ((d.c - d.b) > 3) & ((d.c - d.b) < 60) &
-                                                           ((d.c - d.b) <= 2.5*(d.b - d.a))
+                                                       dur.cond2 <- ((d.c - d.b) > 3) & ((d.c - d.b) < 30) 
                                                        
-                                                       if(p.c > p.b & alpha2 > 1 & dur.cond2
-                                                          & p.c > 0.5*p.a){
+                                                       if(p.c > 0.6*p.a + 0.4*p.b &
+                                                          alpha2 > 1 &
+                                                          dur.cond2 & p.c <= p.a){
 
                                                            min.loc2 <- min.loc[which(min.loc > c)]
                                                            for(d in min.loc2){
@@ -144,17 +163,11 @@ contenders <- mclapply(price.data, function(price){
 
                                                                beta <- uprv2/dprv3
                                                                dur.cond3 <- ((d.d - d.c) < 20) &
-                                                                   ((d.d - d.c) > 3) &
-                                                                       ((d.d - d.c) <= 1.5*(d.c - d.b))
+                                                                   ((d.d - d.c) > 3)
 
-                                                               price.cond <- p.d <= p.c &
-                                                               (p.d > 0.7*p.c + 0.3*p.b) &
-                                                               p.c <= p.a & p.d > p.b &
-                                                               p.c >= 0.8*p.a
-                                                               # & p.d < 0.9*p.c
-                                                               
-                                                               
-                                                               if(price.cond & beta > 0.6 & dur.cond3){
+                                                               price.cond <- p.d <= p.c 
+                                                                   
+                                                               if(price.cond & beta > 1 & dur.cond3 & (current.date - d.d < 20)){
                                                                    gamma <- log(alpha2) + log(beta) + delta
                                                                    
                                                                    good.points[[i]] <- data.frame(d.k, d.a,
@@ -185,11 +198,11 @@ contenders <- mclapply(price.data, function(price){
                                         # find the best points with highest gamma
 
                                    best.point <- c(good.points[which(good.points$gamma == max(good.points$gamma)), ])
-                                   if(best.point$gamma > 6){
+                                   if(best.point$gamma > 5){
                                        pdf(paste0("PLOTS/", company.name,
                                                   ".pdf"))
                                        par(mfrow = c(2, 1))
-                                       plot(data$date, data$close, cex = .1,
+                                       plot(data$date, data$xclose, cex = .1,
                                             xlab = "date", ylab = "price",
                                             type = "p", xaxt = "n",
                                             main = company.name)
@@ -198,8 +211,8 @@ contenders <- mclapply(price.data, function(price){
                                        lines(data$date, fitted(model.np),
                                              type = "l", col = "blue")
                                        abline(v = best.point[1:5])
-                                        #abline(v = data$date[max.loc], col = "green")
-                                        #abline(v = data$date[min.loc], col = "pink")
+#                                       abline(v = data$date[max.loc], col = "green")
+#                                       abline(v = data$date[min.loc], col = "pink")
                                        barplot(data$volume, ylab = "volume",
                                                xlab = "date")
                                        dev.off()
