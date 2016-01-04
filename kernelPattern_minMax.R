@@ -7,7 +7,8 @@ library("parallel")
 
 current.date <- Sys.Date()
 
-generateContenders <- function(allBackDated = FALSE, daysBack = 300, numDaysPast = 10){
+generateContenders <- function(allDaysPast = FALSE, getNewData = FALSE, daysBack = 300,
+                               numDaysPast = 270){
     ## allBackDated is a boolean to check if all patterns are required
     ## daysBack takes of no. of days back in history to start from
     ## noDaysPast valid if allBackDated = FALSE and denotes no. of
@@ -17,19 +18,21 @@ generateContenders <- function(allBackDated = FALSE, daysBack = 300, numDaysPast
                                         # getting price volume information
     symbols.list <- read.csv("DATA/bseSymbols.csv")[ ,2]
     symbols.list <- paste0(symbols.list, ".BO")
-
-    ## system.time(price.data <- mclapply(symbols.list, function(x){
-    ##                            tryCatch(
-    ##                                getSymbols(x, env = NULL,
-    ##                                           from = start.date),
-    ##                                error = function(e) NULL)
-    ##                        }, mc.cores = 3))
-
-    ## names(price.data) <- symbols.list
-    ## price.data <- price.data[!sapply(price.data, is.null)]
-    ## save(price.data, file = "prices.Rda")
-
-    load("prices.Rda")
+    
+    if(getNewData){
+        system.time(price.data <- mclapply(symbols.list, function(x){
+                                               tryCatch(
+                                                   getSymbols(x, env = NULL,
+                                                              from = start.date),
+                                                   error = function(e) NULL)
+                                           }, mc.cores = 3))
+        
+        names(price.data) <- symbols.list
+        price.data <- price.data[!sapply(price.data, is.null)]
+        save(price.data, file = "prices.Rda")
+    }
+    else 
+        load("prices.Rda")
                                         # searching for patterns in each stock
     contenders <- mclapply(price.data, function(price){
                                tryCatch({
@@ -172,7 +175,7 @@ generateContenders <- function(allBackDated = FALSE, daysBack = 300, numDaysPast
                                                                        ((d.d - d.c) > 3)
 
                                                                    price.cond <- p.d <= p.c 
-                                                                   
+
                                                                    if(price.cond & beta > 1 & dur.cond3 & (current.date - d.d < numDaysPast)){
                                                                        gamma <- log(alpha2) + log(beta) + delta
                                                                        
@@ -230,6 +233,18 @@ generateContenders <- function(allBackDated = FALSE, daysBack = 300, numDaysPast
                                        return(NULL)
                                }, error = function(e) NULL)
                            }, mc.cores = 3)
-
-    save(contenders, file = "contenders.Rda")
+    if(allDaysPast)
+        save(contenders, file = "contenders_all.Rda")
+    else
+        save(contenders, file = "contenders_recent.Rda")
+    
 }
+
+backtestContenders <- function()
+    {
+        load("contenders_all.Rda")
+        load("prices.Rda")
+
+        contenders <- contenders[!sapply(contenders, is.null)]
+        
+    }
